@@ -20,7 +20,6 @@ void allocator_global_heap::do_deallocate_sm(
 
 allocator_global_heap::~allocator_global_heap()
 {
-    throw not_implemented("allocator_global_heap::~allocator_global_heap()", "your code should be here...");
 }
 
 allocator_global_heap::allocator_global_heap(const allocator_global_heap &other)
@@ -30,7 +29,6 @@ allocator_global_heap::allocator_global_heap(const allocator_global_heap &other)
 
 allocator_global_heap &allocator_global_heap::operator=(const allocator_global_heap &other)
 {
-    throw not_implemented("allocator_global_heap &allocator_global_heap::operator=(const allocator_global_heap &other)", "your code should be here...");
 }
 
 bool allocator_global_heap::do_is_equal(const std::pmr::memory_resource &other) const noexcept
@@ -40,10 +38,8 @@ bool allocator_global_heap::do_is_equal(const std::pmr::memory_resource &other) 
 
 allocator_global_heap::allocator_global_heap(allocator_global_heap &&other) noexcept
 {
-    throw not_implemented("allocator_global_heap::allocator_global_heap(allocator_global_heap &&) noexcept", "your code should be here...");
 }
 
 allocator_global_heap &allocator_global_heap::operator=(allocator_global_heap &&other) noexcept
 {
-    throw not_implemented("allocator_global_heap &allocator_global_heap::operator=(allocator_global_heap &&) noexcept", "your code should be here...");
 }
