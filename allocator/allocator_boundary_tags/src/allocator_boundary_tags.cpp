@@ -29,6 +29,45 @@ static inline void*& get_free_head(void* trusted) noexcept {
 }
 
 
+static constexpr size_t block_header_size = sizeof(size_t) + sizeof(bool);
+static constexpr size_t block_footer_size = sizeof(size_t);
+static constexpr size_t min_free_block_size = block_header_size + block_footer_size + sizeof(void*) * 2;
+
+inline static size_t& block_size(void* block) noexcept {
+    return *reinterpret_cast<size_t*>(block);
+}
+
+inline static bool& block_used(void* block) noexcept {
+    return *reinterpret_cast<bool*>(static_cast<char*>(block) + sizeof(size_t));
+}
+
+inline static void*& block_prev_free(void* block) noexcept {
+    return *reinterpret_cast<void**>(static_cast<char*>(block) + block_header_size);
+}
+
+inline static void*& block_next_free(void* block) noexcept {
+    return *reinterpret_cast<void**>(static_cast<char*>(block) + block_header_size + sizeof(void*));
+}
+
+inline static size_t& block_footer(void* block) noexcept {
+    return *reinterpret_cast<size_t*>(static_cast<char*>(block) + block_size(block) - block_footer_size);
+}
+
+inline static void* block_from_user(void* user_ptr) noexcept {
+    return static_cast<char*>(user_ptr) - block_header_size;
+}
+
+inline static void* block_data(void* block) noexcept {
+    return static_cast<char*>(block) + block_header_size;
+}
+
+static inline bool is_address_in_range(void* trusted, void* addr) noexcept {
+    char* start = static_cast<char*>(trusted);
+    char* end = start + get_total_space(trusted);
+    char* p = static_cast<char*>(addr);
+    return p >= start && p < end;
+}
+
 
 allocator_boundary_tags::~allocator_boundary_tags()
 {
