@@ -338,19 +338,14 @@ std::vector<allocator_test_utils::block_info> allocator_boundary_tags::get_block
     return result;
 }
 
-std::vector<allocator_test_utils::block_info> allocator_boundary_tags::get_blocks_info() const
-{
-    throw not_implemented("std::vector<allocator_test_utils::block_info> allocator_boundary_tags::get_blocks_info() const", "your code should be here...");
-}
-
 allocator_boundary_tags::boundary_iterator allocator_boundary_tags::begin() const noexcept
 {
-    throw not_implemented("allocator_boundary_tags::boundary_iterator allocator_boundary_tags::begin() const noexcept", "your code should be here...");
+    return boundary_iterator(_trusted_memory);
 }
 
 allocator_boundary_tags::boundary_iterator allocator_boundary_tags::end() const noexcept
 {
-    throw not_implemented("allocator_boundary_tags::boundary_iterator allocator_boundary_tags::end() const noexcept", "your code should be here...");
+    return boundary_iterator(nullptr);
 }
 
 std::vector<allocator_test_utils::block_info> allocator_boundary_tags::get_blocks_info_inner() const
