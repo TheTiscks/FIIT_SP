@@ -81,7 +81,7 @@ allocator_boundary_tags::~allocator_boundary_tags()
 }
 
 allocator_boundary_tags::allocator_boundary_tags(
-    allocator_boundary_tags &&other) noexcept
+    allocator_boundary_tags &other) noexcept
 {
     if (!other._trusted_memory) {
         _trusted_memory = nullptr;
