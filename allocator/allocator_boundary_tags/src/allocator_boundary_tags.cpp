@@ -1,9 +1,44 @@
 #include <not_implemented.h>
 #include "../include/allocator_boundary_tags.h"
+#include <new>
+
+static inline std::pmr::memory_resource*& get_parent(void* trusted) noexcept {
+    return *reinterpret_cast<std::pmr::memory_resource**>(trusted);
+}
+
+static inline allocator_with_fit_mode::fit_mode& get_fit_mode(void* trusted) noexcept {
+    return *reinterpret_cast<allocator_with_fit_mode::fit_mode*>(
+        static_cast<char*>(trusted) + sizeof(std::pmr::memory_resource*));
+}
+
+static inline size_t& get_total_space(void* trusted) noexcept {
+    return *reinterpret_cast<size_t*>(
+        static_cast<char*>(trusted) + sizeof(std::pmr::memory_resource*) + sizeof(allocator_with_fit_mode::fit_mode));
+}
+
+static inline std::mutex& get_mutex(void* trusted) noexcept {
+    return *reinterpret_cast<std::mutex*>(
+        static_cast<char*>(trusted) + sizeof(std::pmr::memory_resource*) + sizeof(allocator_with_fit_mode::fit_mode)
+        + sizeof(size_t));
+}
+
+static inline void*& get_free_head(void* trusted) noexcept {
+    return *reinterpret_cast<void**>(
+        static_cast<char*>(trusted) + sizeof(std::pmr::memory_resource*) + sizeof(allocator_with_fit_mode::fit_mode)
+        + sizeof(size_t) + sizeof(std::mutex));
+}
+
+
 
 allocator_boundary_tags::~allocator_boundary_tags()
 {
-    throw not_implemented("allocator_boundary_tags::~allocator_boundary_tags()", "your code should be here...");
+    if (!_trusted_memory) {
+        return;
+    }
+    get_mutex(_trusted_memory).~mutex();
+    std::pmr::memory_resource* parent = get_parent(_trusted_memory);
+    parent->deallocate(_trusted_memory, get_total_space(_trusted_memory), alignof(std::max_align_t));
+    _trusted_memory = nullptr;
 }
 
 allocator_boundary_tags::allocator_boundary_tags(
