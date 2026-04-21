@@ -136,15 +136,6 @@ allocator_boundary_tags::allocator_boundary_tags(allocator_boundary_tags&& other
     other._trusted_memory = nullptr;
 }
 
-allocator_boundary_tags& allocator_boundary_tags::operator=(const allocator_boundary_tags& other)
-{
-    if (this != &other) {
-        this->~allocator_boundary_tags();
-        new (this) allocator_boundary_tags(other);
-    }
-    return *this;
-}
-
 /** If parent_allocator* == nullptr you should use std::pmr::get_default_resource()
  */
 allocator_boundary_tags::allocator_boundary_tags(
@@ -348,84 +339,101 @@ allocator_boundary_tags::boundary_iterator allocator_boundary_tags::end() const 
     return boundary_iterator(nullptr);
 }
 
-std::vector<allocator_test_utils::block_info> allocator_boundary_tags::get_blocks_info_inner() const
-{
-    throw not_implemented("std::vector<allocator_test_utils::block_info> allocator_boundary_tags::get_blocks_info_inner() const", "your code should be here...");
-}
 
-allocator_boundary_tags::allocator_boundary_tags(const allocator_boundary_tags &other)
+allocator_boundary_tags& allocator_boundary_tags::operator=(const allocator_boundary_tags& other)
 {
-    throw not_implemented("allocator_boundary_tags::allocator_boundary_tags(const allocator_boundary_tags &other)", "your code should be here...");
+    if (this != &other) {
+        this->~allocator_boundary_tags();
+        new (this) allocator_boundary_tags(other);
+    }
+    return *this;
 }
-
-allocator_boundary_tags &allocator_boundary_tags::operator=(const allocator_boundary_tags &other)
-{
-    throw not_implemented("allocator_boundary_tags &allocator_boundary_tags::operator=(const allocator_boundary_tags &other)", "your code should be here...");
-}
-
-bool allocator_boundary_tags::do_is_equal(const std::pmr::memory_resource &other) const noexcept
-{
-    throw not_implemented("bool allocator_boundary_tags::do_is_equal(const std::pmr::memory_resource &other) const noexcept", "your code should be here...");
-}
-
 bool allocator_boundary_tags::boundary_iterator::operator==(
         const allocator_boundary_tags::boundary_iterator &other) const noexcept
 {
-    throw not_implemented("bool allocator_boundary_tags::boundary_iterator::operator==(const allocator_boundary_tags::boundary_iterator &) const noexcept", "your code should be here...");
+    return _occupied_ptr == other._occupied_ptr;
 }
 
 bool allocator_boundary_tags::boundary_iterator::operator!=(
         const allocator_boundary_tags::boundary_iterator & other) const noexcept
 {
-    throw not_implemented("bool allocator_boundary_tags::boundary_iterator::operator!=(const allocator_boundary_tags::boundary_iterator &) const noexcept", "your code should be here...");
+    return !(*this == other);
 }
 
 allocator_boundary_tags::boundary_iterator &allocator_boundary_tags::boundary_iterator::operator++() & noexcept
 {
-    throw not_implemented("allocator_boundary_tags::boundary_iterator &allocator_boundary_tags::boundary_iterator::operator++() & noexcept", "your code should be here...");
+    if (!_occupied_ptr) {
+        return *this;
+    }
+    size_t sz = block_size(_occupied_ptr);
+    _occupied_ptr = static_cast<char*>(_occupied_ptr) + sz;
+    if (_trusted_memory && _occupied_ptr >= static_cast<char*>(_trusted_memory) + get_total_space(_trusted_memory)) {
+        _occupied_ptr = nullptr;
+    }
+    return *this;
 }
 
 allocator_boundary_tags::boundary_iterator &allocator_boundary_tags::boundary_iterator::operator--() & noexcept
 {
-    throw not_implemented("allocator_boundary_tags::boundary_iterator &allocator_boundary_tags::boundary_iterator::operator--() & noexcept", "your code should be here...");
+    if (!_occupied_ptr || !_trusted_memory) {
+        return *this;
+    }
+    if (_occupied_ptr == static_cast<char*>(_trusted_memory) + allocator_metadata_size) {
+        _occupied_ptr = nullptr;
+        return *this;
+    }
+    size_t prev_sz = *reinterpret_cast<size_t*>(static_cast<char*>(_occupied_ptr) - block_footer_size);
+    _occupied_ptr = static_cast<char*>(_occupied_ptr) - prev_sz;
+    return *this;
 }
 
 allocator_boundary_tags::boundary_iterator allocator_boundary_tags::boundary_iterator::operator++(int n)
 {
-    throw not_implemented("allocator_boundary_tags::boundary_iterator allocator_boundary_tags::boundary_iterator::operator++(int n)", "your code should be here...");
+    boundary_iterator tmp = *this;
+    ++(*this);
+    return tmp;
 }
 
 allocator_boundary_tags::boundary_iterator allocator_boundary_tags::boundary_iterator::operator--(int n)
 {
-    throw not_implemented("allocator_boundary_tags::boundary_iterator allocator_boundary_tags::boundary_iterator::operator--(int n)", "your code should be here...");
+    boundary_iterator tmp = *this;
+    --(*this);
+    return tmp;
 }
 
 size_t allocator_boundary_tags::boundary_iterator::size() const noexcept
 {
-    throw not_implemented("size_t allocator_boundary_tags::boundary_iterator::size() const noexcept", "your code should be here...");
+    if (!_occupied_ptr) {
+        return 0;
+    }
+    return block_size(_occupied_ptr) - block_header_size - block_footer_size;
 }
 
 bool allocator_boundary_tags::boundary_iterator::occupied() const noexcept
 {
-    throw not_implemented("bool allocator_boundary_tags::boundary_iterator::occupied() const noexcept", "your code should be here...");
+    return _occupied_ptr ? block_used(_occupied_ptr) : false;
 }
 
 void* allocator_boundary_tags::boundary_iterator::operator*() const noexcept
 {
-    throw not_implemented("void* allocator_boundary_tags::boundary_iterator::operator*() const noexcept", "your code should be here...");
+    return _occupied_ptr ? block_data(_occupied_ptr) : nullptr;
 }
 
 allocator_boundary_tags::boundary_iterator::boundary_iterator()
+    : _occupied_ptr(nullptr), _occupied(false), _trusted_memory(nullptr)
 {
-    throw not_implemented("allocator_boundary_tags::boundary_iterator::boundary_iterator()", "your code should be here...");
 }
 
 allocator_boundary_tags::boundary_iterator::boundary_iterator(void *trusted)
+    : _occupied_ptr(trusted ? static_cast<char*>(trusted) + allocator_metadata_size : nullptr), _occupied(false),
+      _trusted_memory(trusted)
 {
-    throw not_implemented("allocator_boundary_tags::boundary_iterator::boundary_iterator(void *)", "your code should be here...");
+    if (_trusted_memory && _occupied_ptr >= static_cast<char*>(_trusted_memory) + get_total_space(_trusted_memory)) {
+        _occupied_ptr = nullptr;
+    }
 }
 
-void *allocator_boundary_tags::boundary_iterator::get_ptr() const noexcept
+void* allocator_boundary_tags::boundary_iterator::get_ptr() const noexcept
 {
-    throw not_implemented("void *allocator_boundary_tags::boundary_iterator::get_ptr() const noexcept", "your code should be here...");
+    return _occupied_ptr;
 }
