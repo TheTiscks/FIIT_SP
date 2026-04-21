@@ -81,7 +81,7 @@ allocator_boundary_tags::~allocator_boundary_tags()
 }
 
 allocator_boundary_tags::allocator_boundary_tags(
-    allocator_boundary_tags &other) noexcept
+    const allocator_boundary_tags &other)
 {
     if (!other._trusted_memory) {
         _trusted_memory = nullptr;
@@ -143,7 +143,26 @@ allocator_boundary_tags::allocator_boundary_tags(
         std::pmr::memory_resource *parent_allocator,
         allocator_with_fit_mode::fit_mode allocate_fit_mode)
 {
-    throw not_implemented("allocator_boundary_tags::allocator_boundary_tags(size_t,std::pmr::memory_resource *,logger *,allocator_with_fit_mode::fit_mode)", "your code should be here...");
+    std::pmr::memory_resource* parent = parent_allocator ? parent_allocator : std::pmr::get_default_resource();
+    _trusted_memory = parent->allocate(space_size, alignof(std::max_align_t));
+    if (!_trusted_memory) {
+        throw std::bad_alloc();
+    }
+    get_parent(_trusted_memory) = parent;
+    get_fit_mode(_trusted_memory) = allocate_fit_mode;
+    get_total_space(_trusted_memory) = space_size;
+    new (&get_mutex(_trusted_memory)) std::mutex();
+    get_free_head(_trusted_memory) = nullptr;
+    void* first_block = static_cast<char*>(_trusted_memory) + allocator_metadata_size;
+    size_t total_block_space = space_size - allocator_metadata_size;
+    if (total_block_space >= block_header_size + block_footer_size) {
+        block_size(first_block) = total_block_space;
+        block_used(first_block) = false;
+        block_prev_free(first_block) = nullptr;
+        block_next_free(first_block) = nullptr;
+        block_footer(first_block) = total_block_space;
+        get_free_head(_trusted_memory) = first_block;
+    }
 }
 
 [[nodiscard]] void *allocator_boundary_tags::do_allocate_sm(
