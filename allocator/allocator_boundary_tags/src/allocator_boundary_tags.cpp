@@ -29,9 +29,8 @@ static inline void*& get_free_head(void* trusted) noexcept {
 }
 
 
-static constexpr size_t block_header_size = sizeof(size_t) + sizeof(bool);
-static constexpr size_t block_footer_size = sizeof(size_t);
-static constexpr size_t min_free_block_size = block_header_size + block_footer_size + sizeof(void*) * 2;
+static constexpr size_t metadata_size = sizeof(size_t) + 3 * sizeof(void*);
+static constexpr size_t min_free_block_size = metadata_size + 1;
 
 inline static size_t& block_size(void* block) noexcept {
     return *reinterpret_cast<size_t*>(block);
@@ -42,23 +41,19 @@ inline static bool& block_used(void* block) noexcept {
 }
 
 inline static void*& block_prev_free(void* block) noexcept {
-    return *reinterpret_cast<void**>(static_cast<char*>(block) + block_header_size);
+    return *reinterpret_cast<void**>(static_cast<char*>(block) + sizeof(size_t) + sizeof(bool));
 }
 
 inline static void*& block_next_free(void* block) noexcept {
-    return *reinterpret_cast<void**>(static_cast<char*>(block) + block_header_size + sizeof(void*));
-}
-
-inline static size_t& block_footer(void* block) noexcept {
-    return *reinterpret_cast<size_t*>(static_cast<char*>(block) + block_size(block) - block_footer_size);
+    return *reinterpret_cast<void**>(static_cast<char*>(block) + sizeof(size_t) + sizeof(bool) + sizeof(void*));
 }
 
 inline static void* block_from_user(void* user_ptr) noexcept {
-    return static_cast<char*>(user_ptr) - block_header_size;
+    return static_cast<char*>(user_ptr) - metadata_size;
 }
 
 inline static void* block_data(void* block) noexcept {
-    return static_cast<char*>(block) + block_header_size;
+    return static_cast<char*>(block) + metadata_size;
 }
 
 static inline bool is_address_in_range(void* trusted, void* addr) noexcept {
@@ -91,15 +86,15 @@ allocator_boundary_tags::allocator_boundary_tags(
     size_t space_size = get_total_space(other._trusted_memory);
     std::pmr::memory_resource* parent = get_parent(other._trusted_memory);
     _trusted_memory = parent->allocate(space_size, alignof(std::max_align_t));
-    if (!_trusted_memory) {
-        throw std::bad_alloc();
-    }
+    if (!_trusted_memory) throw std::bad_alloc();
+
     get_parent(_trusted_memory) = parent;
     get_fit_mode(_trusted_memory) = get_fit_mode(other._trusted_memory);
     get_total_space(_trusted_memory) = space_size;
     new (&get_mutex(_trusted_memory)) std::mutex();
     get_free_head(_trusted_memory) = nullptr;
-    void* src = get_free_head(other._trusted_memory); // копируем список свободных
+
+    void* src = get_free_head(other._trusted_memory);
     void* prev_dst = nullptr;
     while (src) {
         size_t sz = block_size(src);
@@ -108,12 +103,10 @@ allocator_boundary_tags::allocator_boundary_tags(
         block_used(dst_block) = false;
         block_prev_free(dst_block) = nullptr;
         block_next_free(dst_block) = nullptr;
-        block_footer(dst_block) = sz;
-        if (prev_dst) {
+        if (prev_dst)
             block_next_free(prev_dst) = dst_block;
-        } else {
+        else
             get_free_head(_trusted_memory) = dst_block;
-        }
         prev_dst = dst_block;
         src = block_next_free(src);
     }
@@ -139,9 +132,9 @@ allocator_boundary_tags::allocator_boundary_tags(allocator_boundary_tags&& other
 /** If parent_allocator* == nullptr you should use std::pmr::get_default_resource()
  */
 allocator_boundary_tags::allocator_boundary_tags(
-        size_t space_size,
-        std::pmr::memory_resource *parent_allocator,
-        allocator_with_fit_mode::fit_mode allocate_fit_mode)
+    size_t space_size,
+    std::pmr::memory_resource *parent_allocator,
+    allocator_with_fit_mode::fit_mode allocate_fit_mode)
 {
     std::pmr::memory_resource* parent = parent_allocator ? parent_allocator : std::pmr::get_default_resource();
     _trusted_memory = parent->allocate(space_size, alignof(std::max_align_t));
@@ -155,31 +148,28 @@ allocator_boundary_tags::allocator_boundary_tags(
     get_free_head(_trusted_memory) = nullptr;
     void* first_block = static_cast<char*>(_trusted_memory) + allocator_metadata_size;
     size_t total_block_space = space_size - allocator_metadata_size;
-    if (total_block_space >= block_header_size + block_footer_size) {
+    if (total_block_space >= metadata_size + 1) {
         block_size(first_block) = total_block_space;
         block_used(first_block) = false;
         block_prev_free(first_block) = nullptr;
         block_next_free(first_block) = nullptr;
-        block_footer(first_block) = total_block_space;
         get_free_head(_trusted_memory) = first_block;
     }
 }
 
-[[nodiscard]] void *allocator_boundary_tags::do_allocate_sm(
-    size_t size)
+[[nodiscard]] void *allocator_boundary_tags::do_allocate_sm(size_t size)
 {
-    if (size == 0) {
-        return nullptr;
-    }
+    if (size == 0) return nullptr;
     std::lock_guard<std::mutex> lock(get_mutex(_trusted_memory));
     fit_mode mode = get_fit_mode(_trusted_memory);
     void* best = nullptr;
     void* best_prev = nullptr;
     void* prev = nullptr;
     void* curr = get_free_head(_trusted_memory);
-    if (mode == fit_mode::first_fit) { // ищем подходящий блок
+
+    if (mode == fit_mode::first_fit) {
         while (curr) {
-            size_t usable = block_size(curr) - block_header_size - block_footer_size;
+            size_t usable = block_size(curr) - metadata_size;
             if (usable >= size) {
                 best = curr;
                 best_prev = prev;
@@ -191,7 +181,7 @@ allocator_boundary_tags::allocator_boundary_tags(
     } else if (mode == fit_mode::the_best_fit) {
         size_t best_diff = ~size_t(0);
         while (curr) {
-            size_t usable = block_size(curr) - block_header_size - block_footer_size;
+            size_t usable = block_size(curr) - metadata_size;
             if (usable >= size && usable - size < best_diff) {
                 best_diff = usable - size;
                 best = curr;
@@ -203,7 +193,7 @@ allocator_boundary_tags::allocator_boundary_tags(
     } else if (mode == fit_mode::the_worst_fit) {
         size_t best_sz = 0;
         while (curr) {
-            size_t usable = block_size(curr) - block_header_size - block_footer_size;
+            size_t usable = block_size(curr) - metadata_size;
             if (usable >= size && usable > best_sz) {
                 best_sz = usable;
                 best = curr;
@@ -213,43 +203,36 @@ allocator_boundary_tags::allocator_boundary_tags(
             curr = block_next_free(curr);
         }
     }
-    if (!best) {
-        throw std::bad_alloc();
-    }
-    // удалим best
-    if (best_prev) {
+    if (!best) throw std::bad_alloc();
+
+    if (best_prev)
         block_next_free(best_prev) = block_next_free(best);
-    } else {
+    else
         get_free_head(_trusted_memory) = block_next_free(best);
-    }
-    if (block_next_free(best)) {
+    if (block_next_free(best))
         block_prev_free(block_next_free(best)) = best_prev;
-    }
+
     size_t total_block_sz = block_size(best);
-    size_t needed_total = size + block_header_size + block_footer_size;
+    size_t needed_total = size + metadata_size;
     size_t remaining = total_block_sz - needed_total;
     if (remaining >= min_free_block_size) {
-        block_size(best) = needed_total; // разделяем на выделенный и своб
+        block_size(best) = needed_total;
         block_used(best) = true;
-        block_footer(best) = needed_total;
         void* new_free = static_cast<char*>(best) + needed_total;
         block_size(new_free) = remaining;
         block_used(new_free) = false;
         block_prev_free(new_free) = nullptr;
         block_next_free(new_free) = get_free_head(_trusted_memory);
-        if (get_free_head(_trusted_memory)) {
+        if (get_free_head(_trusted_memory))
             block_prev_free(get_free_head(_trusted_memory)) = new_free;
-        }
         get_free_head(_trusted_memory) = new_free;
-        block_footer(new_free) = remaining;
     } else {
-        block_used(best) = true; // исп весь блок
+        block_used(best) = true;
     }
     return block_data(best);
 }
 
-void allocator_boundary_tags::do_deallocate_sm(
-    void *at)
+void allocator_boundary_tags::do_deallocate_sm(void *at)
 {
     if (!at) {
         return;
@@ -260,42 +243,7 @@ void allocator_boundary_tags::do_deallocate_sm(
         return;
     }
     block_used(block) = false;
-    void* next_block = static_cast<char*>(block) + block_size(block); // Проверка - след блок
-    char* end = static_cast<char*>(_trusted_memory) + get_total_space(_trusted_memory);
-    if (next_block < end && !block_used(next_block)) {
-        void* next_prev = block_prev_free(next_block); // объед с next_block, удаляем next из свободных
-        void* next_next = block_next_free(next_block);
-        if (next_prev) {
-            block_next_free(next_prev) = next_next;
-        } else {
-            get_free_head(_trusted_memory) = next_next;
-        }
-        if (next_next) {
-            block_prev_free(next_next) = next_prev;
-        }
-        block_size(block) += block_size(next_block);
-        block_footer(block) = block_size(block);
-    }
-    if (block > static_cast<char*>(_trusted_memory) + allocator_metadata_size) { // проверка - пред. блок
-        size_t prev_size = *reinterpret_cast<size_t*>(static_cast<char*>(block) - block_footer_size);
-        void* prev_block = static_cast<char*>(block) - prev_size;
-        if (prev_block >= static_cast<char*>(_trusted_memory) + allocator_metadata_size && !block_used(prev_block)) {
-            void* prev_prev = block_prev_free(prev_block); // объед с prev_block
-            void* prev_next = block_next_free(prev_block);
-            if (prev_prev) {
-                block_next_free(prev_prev) = prev_next;
-            } else {
-                get_free_head(_trusted_memory) = prev_next;
-            }
-            if (prev_next) {
-                block_prev_free(prev_next) = prev_prev;
-            }
-            block_size(prev_block) += block_size(block);
-            block_footer(prev_block) = block_size(prev_block);
-            block = prev_block;
-        }
-    }
-    void* prev = nullptr; // +блок в список свободных
+    void* prev = nullptr;
     void* curr = get_free_head(_trusted_memory);
     while (curr && curr < block) {
         prev = curr;
@@ -310,6 +258,39 @@ void allocator_boundary_tags::do_deallocate_sm(
     }
     if (curr) {
         block_prev_free(curr) = block;
+    }
+    void* next = block_next_free(block);
+    if (next && static_cast<char*>(block) + block_size(block) == next) {
+        void* next_next = block_next_free(next);
+        if (block_prev_free(next)) {
+            block_next_free(block_prev_free(next)) = next_next;
+        } else {
+            get_free_head(_trusted_memory) = next_next;
+        }
+        if (next_next) {
+            block_prev_free(next_next) = block_prev_free(next);
+        }
+        block_size(block) += block_size(next);
+        block_next_free(block) = next_next;
+        if (next_next) {
+            block_prev_free(next_next) = block;
+        }
+    }
+    void* prev_free = block_prev_free(block);
+    if (prev_free && static_cast<char*>(prev_free) + block_size(prev_free) == block) {
+        void* block_next = block_next_free(block);
+        if (block_prev_free(block)) {
+            block_next_free(block_prev_free(block)) = block_next;
+        } else {
+            get_free_head(_trusted_memory) = block_next;
+        }
+        if (block_next) {
+            block_prev_free(block_next) = block_prev_free(block);
+        }
+        block_size(prev_free) += block_size(block);
+        block_next_free(prev_free) = block_next;
+        if (block_next)
+            block_prev_free(block_next) = prev_free;
     }
 }
 
@@ -340,7 +321,7 @@ std::vector<allocator_test_utils::block_info> allocator_boundary_tags::get_block
     void* curr = static_cast<char*>(_trusted_memory) + allocator_metadata_size;
     void* end = static_cast<char*>(_trusted_memory) + get_total_space(_trusted_memory);
     while (curr < end) {
-        size_t sz = block_size(curr) - block_header_size - block_footer_size;
+        size_t sz = block_size(curr) - metadata_size;
         bool occupied = block_used(curr);
         result.push_back({sz, occupied});
         curr = static_cast<char*>(curr) + block_size(curr);
@@ -397,11 +378,12 @@ allocator_boundary_tags::boundary_iterator &allocator_boundary_tags::boundary_it
     if (!_occupied_ptr || !_trusted_memory) {
         return *this;
     }
-    if (_occupied_ptr == static_cast<char*>(_trusted_memory) + allocator_metadata_size) {
+    char* start = static_cast<char*>(_trusted_memory) + allocator_metadata_size;
+    if (_occupied_ptr == start) {
         _occupied_ptr = nullptr;
         return *this;
     }
-    size_t prev_sz = *reinterpret_cast<size_t*>(static_cast<char*>(_occupied_ptr) - block_footer_size);
+    size_t prev_sz = *reinterpret_cast<size_t*>(static_cast<char*>(_occupied_ptr) - sizeof(size_t));
     _occupied_ptr = static_cast<char*>(_occupied_ptr) - prev_sz;
     return *this;
 }
@@ -425,7 +407,7 @@ size_t allocator_boundary_tags::boundary_iterator::size() const noexcept
     if (!_occupied_ptr) {
         return 0;
     }
-    return block_size(_occupied_ptr) - block_header_size - block_footer_size;
+    return block_size(_occupied_ptr) - metadata_size;
 }
 
 bool allocator_boundary_tags::boundary_iterator::occupied() const noexcept
