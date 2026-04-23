@@ -293,7 +293,7 @@ std::vector<allocator_test_utils::block_info> allocator_sorted_list::get_blocks_
             }
             free_ptr = block_next(free_ptr);
         }
-        result.push_back({sz, !is_free});   // ← исправлено
+        result.push_back({sz, !is_free});
         ptr += block_metadata_size + sz;
     }
     return result;

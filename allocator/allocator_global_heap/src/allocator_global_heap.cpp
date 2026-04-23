@@ -15,8 +15,7 @@ allocator_global_heap::allocator_global_heap()
     return ::operator new(size);
 }
 
-void allocator_global_heap::do_deallocate_sm(
-    void *at)
+void allocator_global_heap::do_deallocate_sm(void *at)
 {
     if (!at) {
         return;
