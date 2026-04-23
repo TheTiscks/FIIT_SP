@@ -8,6 +8,9 @@ allocator_global_heap::allocator_global_heap()
 [[nodiscard]] void *allocator_global_heap::do_allocate_sm(
     size_t size)
 {
+    if (size == 0) {
+        return nullptr;
+    }
     std::lock_guard<std::mutex> lock(m_mutex);
     return ::operator new(size);
 }
@@ -15,6 +18,9 @@ allocator_global_heap::allocator_global_heap()
 void allocator_global_heap::do_deallocate_sm(
     void *at)
 {
+    if (!at) {
+        return;
+    }
     std::lock_guard<std::mutex> lock(m_mutex);
     ::operator delete(at);
 }
