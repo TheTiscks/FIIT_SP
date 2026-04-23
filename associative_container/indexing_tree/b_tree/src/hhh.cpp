@@ -1,4 +1,1 @@
-#include "../include/b_plus_tree.h"
-
-
-volatile int dummy = 2;
+#include "../include/b_tree.h"
