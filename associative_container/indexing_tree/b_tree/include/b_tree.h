@@ -11,7 +11,7 @@
 #include <optional>
 
 template <typename tkey, typename tvalue, comparator<tkey> compare = std::less<tkey>, std::size_t t = 5>
-class B_tree final : private compare // EBCO
+class B_tree final : private compare
 {
 public:
     using tree_data_type = std::pair<tkey, tvalue>;
@@ -189,7 +189,6 @@ private:
 
 
 public:
-    // region constructors
     explicit B_tree(const compare& cmp = compare(), pp_allocator<value_type> alloc = pp_allocator<value_type>())
         : compare(cmp), _allocator(alloc), _root(nullptr), _size(0)
     {}
@@ -214,9 +213,7 @@ public:
             insert(item);
         }
     }
-    // endregion constructors
 
-    // region five
     B_tree(const B_tree& other)
         : compare(other), _allocator(other._allocator), _root(nullptr), _size(0)
     {
@@ -260,9 +257,7 @@ public:
     {
         clear();
     }
-    // endregion five
 
-    // region iterators
     class btree_iterator;
     class btree_reverse_iterator;
     class btree_const_iterator;
@@ -486,13 +481,10 @@ public:
 };
 
 
-template<
-    std::input_iterator iterator,
+template<std::input_iterator iterator,
     comparator<typename std::iterator_traits<iterator>::value_type::first_type> compare =
         std::less<typename std::iterator_traits<iterator>::value_type::first_type>,
-    std::size_t t = 5,
-    typename U
->
+    std::size_t t = 5,typename U>
 B_tree(iterator begin, iterator end, const compare& cmp = compare(), pp_allocator<U> = pp_allocator<U>())
     -> B_tree<typename std::iterator_traits<iterator>::value_type::first_type,
               typename std::iterator_traits<iterator>::value_type::second_type,
@@ -500,11 +492,8 @@ B_tree(iterator begin, iterator end, const compare& cmp = compare(), pp_allocato
               t>;
 
 template<
-    typename tkey,
-    typename tvalue,
-    comparator<tkey> compare = std::less<tkey>,
-    std::size_t t = 5,
-    typename U
+    typename tkey, typename tvalue,
+    comparator<tkey> compare = std::less<tkey>, std::size_t t = 5, typename U
 >
 B_tree(std::initializer_list<std::pair<tkey, tvalue>> data, const compare& cmp = compare(),
        pp_allocator<U> = pp_allocator<U>())
@@ -727,7 +716,6 @@ size_t B_tree<tkey, tvalue, compare, t>::btree_iterator::index() const noexcept
     return _index;
 }
 
-// --- btree_const_iterator ---
 template<typename tkey, typename tvalue, comparator<tkey> compare, std::size_t t>
 B_tree<tkey, tvalue, compare, t>::btree_const_iterator::btree_const_iterator(
     const std::stack<std::pair<btree_node* const*, size_t>>& path, size_t index)
@@ -940,7 +928,6 @@ size_t B_tree<tkey, tvalue, compare, t>::btree_const_iterator::index() const noe
     return _index;
 }
 
-// --- btree_reverse_iterator ---
 template<typename tkey, typename tvalue, comparator<tkey> compare, std::size_t t>
 B_tree<tkey, tvalue, compare, t>::btree_reverse_iterator::btree_reverse_iterator(
     const std::stack<std::pair<btree_node**, size_t>>& path, size_t index)
@@ -1088,7 +1075,6 @@ size_t B_tree<tkey, tvalue, compare, t>::btree_reverse_iterator::index() const n
     return _index;
 }
 
-// --- btree_const_reverse_iterator ---
 template<typename tkey, typename tvalue, comparator<tkey> compare, std::size_t t>
 B_tree<tkey, tvalue, compare, t>::btree_const_reverse_iterator::btree_const_reverse_iterator(
     const std::stack<std::pair<btree_node* const*, size_t>>& path, size_t index)
@@ -1286,7 +1272,6 @@ tvalue& B_tree<tkey, tvalue, compare, t>::operator[](tkey&& key)
     return (*this)[key];
 }
 
-// --- Iterators Begin/End ---
 template<typename tkey, typename tvalue, comparator<tkey> compare, std::size_t t>
 typename B_tree<tkey, tvalue, compare, t>::btree_iterator
 B_tree<tkey, tvalue, compare, t>::begin()
@@ -1381,7 +1366,6 @@ B_tree<tkey, tvalue, compare, t>::crend() const
     return rend();
 }
 
-// --- Lookup ---
 template<typename tkey, typename tvalue, comparator<tkey> compare, std::size_t t>
 size_t B_tree<tkey, tvalue, compare, t>::size() const noexcept
 {
@@ -1455,7 +1439,6 @@ bool B_tree<tkey, tvalue, compare, t>::contains(const tkey& key) const
     return find(key) != end();
 }
 
-// --- Modifiers ---
 template<typename tkey, typename tvalue, comparator<tkey> compare, std::size_t t>
 void B_tree<tkey, tvalue, compare, t>::clear() noexcept
 {
