@@ -183,7 +183,9 @@ private:
 
         return remove_from_node(child, key);
     }
-};
+
+    std::optional<std::pair<tree_data_type, btree_node*>> insert_impl(btree_node* node, const tree_data_type& data);
+
 
 
 public:
@@ -447,7 +449,28 @@ public:
     bool contains(const tkey& key) const;
 
     void clear() noexcept;
-    std::pair<btree_iterator, bool> insert(const tree_data_type& data);
+    std::pair<btree_iterator, bool> insert(const tree_data_type& data)
+    {
+        if (contains(data.first)) {
+            return {find(data.first), false};
+        }
+        if (!_root) {
+            _root = create_node();
+            _root->_keys.push_back(data);
+            ++_size;
+            return {begin(), true};
+        }
+        auto split_res = insert_impl(_root, data);
+        if (split_res) {
+            auto& [up_key, right_node] = *split_res;
+            btree_node* new_root = create_node();
+            new_root->_keys.push_back(std::move(up_key));
+            new_root->_pointers.push_back(_root);
+            new_root->_pointers.push_back(right_node);
+            _root = new_root;
+        }
+        return {find(data.first), true};
+    }
     std::pair<btree_iterator, bool> insert(tree_data_type&& data);
     template<typename... Args>
     std::pair<btree_iterator, bool> emplace(Args&&... args);
@@ -461,90 +484,7 @@ public:
     btree_iterator erase(btree_const_iterator beg, btree_const_iterator en);
     btree_iterator erase(const tkey& key);
 };
-void clear() noexcept;
-std::pair<btree_iterator, bool> insert(const tree_data_type& data) {
-    if (contains(data.first)) {
-        return {find(data.first), false};
-    }
-    if (!_root) {
-        _root = create_node();
-        _root->_keys.push_back(data);
-        ++_size;
-        return {begin(), true};
-    }
-    auto split_res = insert_impl(_root, data);
-    if (split_res) {
-        auto& [up_key, right_node] = *split_res;
-        btree_node* new_root = create_node();
-        new_root->_keys.push_back(std::move(up_key));
-        new_root->_pointers.push_back(_root);
-        new_root->_pointers.push_back(right_node);
-        _root = new_root;
-    }
-    return {find(data.first), true};
-}
 
-std::optional<std::pair<tree_data_type, btree_node*>> insert_impl(btree_node* node, const tree_data_type& data) {
-    if (node->_pointers.empty()) { // leaf
-        size_t pos = find_key_position(node, data.first);
-        node->_keys.insert(node->_keys.begin() + pos, data);
-        ++_size;
-
-        if (node->_keys.size() > maximum_keys_in_node) {
-            btree_node* new_node = create_node();
-            size_t mid = t;
-            auto up_key = std::move(node->_keys[mid]);
-            new_node->_keys.assign(
-                std::make_move_iterator(node->_keys.begin() + mid + 1),
-                std::make_move_iterator(node->_keys.end()));
-            node->_keys.erase(node->_keys.begin() + mid, node->_keys.end());
-            return std::make_pair(std::move(up_key), new_node);
-        }
-        return std::nullopt;
-    } else {
-        size_t pos = find_key_position(node, data.first);
-        btree_node* child = node->_pointers[pos];
-        auto split_res = insert_impl(child, data);
-        if (split_res) {
-            auto& [up_key, right_node] = *split_res;
-            node->_keys.insert(node->_keys.begin() + pos, std::move(up_key));
-            node->_pointers.insert(node->_pointers.begin() + pos + 1, right_node);
-            if (node->_keys.size() > maximum_keys_in_node) {
-                btree_node* new_node2 = create_node();
-                size_t mid = t;
-                auto up_key2 = std::move(node->_keys[mid]);
-                new_node2->_keys.assign(
-                    std::make_move_iterator(node->_keys.begin() + mid + 1),
-                    std::make_move_iterator(node->_keys.end()));
-                new_node2->_pointers.assign(
-                    std::make_move_iterator(node->_pointers.begin() + mid + 1),
-                    std::make_move_iterator(node->_pointers.end()));
-                node->_keys.erase(node->_keys.begin() + mid, node->_keys.end());
-                node->_pointers.erase(node->_pointers.begin() + mid + 1, node->_pointers.end());
-                return std::make_pair(std::move(up_key2), new_node2);
-            }
-        }
-        return std::nullopt;
-    }
-}
-
-std::pair<btree_iterator, bool> insert(tree_data_type&& data);
-
-template<typename... Args>
-std::pair<btree_iterator, bool> emplace(Args&&... args);
-
-btree_iterator insert_or_assign(const tree_data_type& data);
-btree_iterator insert_or_assign(tree_data_type&& data);
-
-template<typename... Args>
-btree_iterator emplace_or_assign(Args&&... args);
-
-btree_iterator erase(btree_iterator pos);
-btree_iterator erase(btree_const_iterator pos);
-btree_iterator erase(btree_iterator beg, btree_iterator en);
-btree_iterator erase(btree_const_iterator beg, btree_const_iterator en);
-btree_iterator erase(const tkey& key);
-};
 
 template<
     std::input_iterator iterator,
@@ -1616,4 +1556,53 @@ B_tree<tkey, tvalue, compare, t>::erase(const tkey& key)
     remove_key(key);
     return next;
 }
+
+
+template<typename tkey, typename tvalue, comparator<tkey> compare, std::size_t t>
+std::optional<std::pair<typename B_tree<tkey, tvalue, compare, t>::tree_data_type, typename B_tree<tkey, tvalue, compare, t>::btree_node*>>
+B_tree<tkey, tvalue, compare, t>::insert_impl(btree_node* node, const tree_data_type& data)
+{
+    if (node->_pointers.empty()) {
+        size_t pos = find_key_position(node, data.first);
+        node->_keys.insert(node->_keys.begin() + pos, data);
+        ++_size;
+
+        if (node->_keys.size() > maximum_keys_in_node) {
+            btree_node* new_node = create_node();
+            size_t mid = t;
+            auto up_key = std::move(node->_keys[mid]);
+            new_node->_keys.assign(
+                std::make_move_iterator(node->_keys.begin() + mid + 1),
+                std::make_move_iterator(node->_keys.end()));
+            node->_keys.erase(node->_keys.begin() + mid, node->_keys.end());
+            return std::make_pair(std::move(up_key), new_node);
+        }
+        return std::nullopt;
+    } else {
+        size_t pos = find_key_position(node, data.first);
+        btree_node* child = node->_pointers[pos];
+        auto split_res = insert_impl(child, data);
+        if (split_res) {
+            auto& [up_key, right_node] = *split_res;
+            node->_keys.insert(node->_keys.begin() + pos, std::move(up_key));
+            node->_pointers.insert(node->_pointers.begin() + pos + 1, right_node);
+            if (node->_keys.size() > maximum_keys_in_node) {
+                btree_node* new_node2 = create_node();
+                size_t mid = t;
+                auto up_key2 = std::move(node->_keys[mid]);
+                new_node2->_keys.assign(
+                    std::make_move_iterator(node->_keys.begin() + mid + 1),
+                    std::make_move_iterator(node->_keys.end()));
+                new_node2->_pointers.assign(
+                    std::make_move_iterator(node->_pointers.begin() + mid + 1),
+                    std::make_move_iterator(node->_pointers.end()));
+                node->_keys.erase(node->_keys.begin() + mid, node->_keys.end());
+                node->_pointers.erase(node->_pointers.begin() + mid + 1, node->_pointers.end());
+                return std::make_pair(std::move(up_key2), new_node2);
+            }
+        }
+        return std::nullopt;
+    }
+}
+
 #endif
