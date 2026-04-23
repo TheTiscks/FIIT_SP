@@ -5,15 +5,22 @@ add_library(
         include/b_tree.h
         src/hhh.cpp)
 
+target_include_directories(sys_prog_assctv_cntnr_indxng_tr_b_tr PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../allocator/allocator/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../associative_container/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../common/include
+)
+
+
 target_include_directories(
         sys_prog_assctv_cntnr_indxng_tr_b_tr
         PUBLIC
         ./include)
 
-target_link_libraries(
-        sys_prog_assctv_cntnr_indxng_tr_b_tr
-        PUBLIC
-        sys_prog_assctv_cntnr)
+#target_link_libraries(
+#        sys_prog_assctv_cntnr_indxng_tr_b_tr
+#        PUBLIC
+#        sys_prog_assctv_cntnr)
 
 
 target_link_libraries(
