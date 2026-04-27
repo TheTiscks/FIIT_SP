@@ -224,38 +224,58 @@ bool allocator_sorted_list::do_is_equal(const std::pmr::memory_resource &other) 
     return this == &other;
 }
 
-void allocator_sorted_list::do_deallocate_sm(
-    void *at)
-{
-    if (!at) {
-        return;
-    }
+void allocator_sorted_list::do_deallocate_sm(void* at) {
+    if (!at) return;
     std::lock_guard<std::mutex> lock(get_mutex(_trusted_memory));
     void* block = block_from_user(at);
     if (!is_address_in_range(_trusted_memory, block)) {
-        return;  // не наш блок
+        throw std::invalid_argument("address out of allocator range");
     }
-    size_t sz = block_size(block);
-    void* prev = nullptr; // блок в список свободных
-    void* curr = get_free_head(_trusted_memory);
-    while (curr && curr < block) {
-        prev = curr;
-        curr = block_next(curr);
+
+    char* start = static_cast<char*>(_trusted_memory) + allocator_metadata_size;
+    char* end   = static_cast<char*>(_trusted_memory) + get_total_space(_trusted_memory);
+    char* curr  = start;
+    bool found  = false;
+    while (curr < end) {
+        if (curr == static_cast<char*>(block)) {
+            void* free_ptr = get_free_head(_trusted_memory);
+            bool in_free = false;
+            while (free_ptr) {
+                if (free_ptr == block) {
+					in_free = true; break;
+				}
+                free_ptr = block_next(free_ptr);
+            }
+            if (in_free) {
+                throw std::invalid_argument("double free: block already in free list");
+            }
+            found = true;
+            break;
+        }
+        curr += sizeof(void*) + sizeof(size_t) + block_size(static_cast<void*>(curr));
     }
-    set_block_next(block, curr);
+    if (!found) {
+        throw std::invalid_argument("invalid block: not found among occupied blocks");
+    }
+    void* prev = nullptr;
+    void* free_curr = get_free_head(_trusted_memory);
+    while (free_curr && free_curr < block) {
+        prev = free_curr;
+        free_curr = block_next(free_curr);
+    }
+    set_block_next(block, free_curr);
     if (prev) {
-        set_block_next(prev, block);
-    } else {
-        get_free_head(_trusted_memory) = block;
-    }
-    if (prev && static_cast<char*>(prev) + block_metadata_size + block_size(prev) == block) {// склейка с пред свободным
-        block_size(prev) += block_metadata_size + block_size(block);
+		set_block_next(prev, block);
+    } else { get_free_head(_trusted_memory) = block;
+	}
+    if (prev && static_cast<char*>(prev) + sizeof(void*) + sizeof(size_t) + block_size(prev) == block) {
+        block_size(prev) += sizeof(void*) + sizeof(size_t) + block_size(block);
         set_block_next(prev, block_next(block));
         block = prev;
     }
-    void* next = block_next(block); // склейка со след свободным
-    if (next && static_cast<char*>(block) + block_metadata_size + block_size(block) == next) {
-        block_size(block) += block_metadata_size + block_size(next);
+    void* next = block_next(block);
+    if (next && static_cast<char*>(block) + sizeof(void*) + sizeof(size_t) + block_size(block) == next) {
+        block_size(block) += sizeof(void*) + sizeof(size_t) + block_size(next);
         set_block_next(block, block_next(next));
     }
 }

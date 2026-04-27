@@ -186,7 +186,8 @@ allocator_boundary_tags& allocator_boundary_tags::operator=(allocator_boundary_t
                 }
                 case fit_mode::the_worst_fit:
                     if (block_size(curr) > best_sz) {
-                        best_sz = block_size(curr); best = curr;
+                        best_sz = block_size(curr);
+                        best = curr;
                     }
                     break;
             }
@@ -227,45 +228,48 @@ allocator_boundary_tags& allocator_boundary_tags::operator=(allocator_boundary_t
 
 void allocator_boundary_tags::do_deallocate_sm(void* at) {
     if (!at) {
-        return;
+		return;
     }
-    std::lock_guard<std::mutex> lock(alloc_mutex(_trusted_memory));
+	std::lock_guard<std::mutex> lock(alloc_mutex(_trusted_memory));
     void* block = block_from_user(at);
     if (!is_valid_block(_trusted_memory, block) || block_is_free(block)) {
-        return;
+        throw std::invalid_argument("invalid or already freed block");
     }
     block_is_free(block) = true;
     void* prev = nullptr;
     void* curr = alloc_first_block(_trusted_memory);
     while (curr && curr < block) {
-        prev = curr; curr = block_next(curr);
+        prev = curr;
+        curr = block_next(curr);
     }
     block_prev(block) = prev;
     block_next(block) = curr;
     if (prev) {
-        block_next(prev) = block;
+		block_next(prev) = block;
     } else {
-        alloc_first_block(_trusted_memory) = block;
+		alloc_first_block(_trusted_memory) = block;
     }
-    if (curr) {
-        block_prev(curr) = block;
+	if (curr) {
+		block_prev(curr) = block;
+	}
+    if (block_next(block) && block_prev(block_next(block)) != block) {
+        throw std::runtime_error("free list corruption: next->prev != self");
+    }
+    if (block_prev(block) && block_next(block_prev(block)) != block) {
+        throw std::runtime_error("free list corruption: prev->next != self");
     }
     void* next = block_next(block);
     if (next && static_cast<char*>(block) + block_size(block) == next) {
         block_size(block) += block_size(next);
         void* nn = block_next(next);
         block_next(block) = nn;
-        if (nn) {
-            block_prev(nn) = block;
-        }
+        if (nn) block_prev(nn) = block;
     }
     prev = block_prev(block);
     if (prev && static_cast<char*>(prev) + block_size(prev) == block) {
         block_size(prev) += block_size(block);
         block_next(prev) = block_next(block);
-        if (block_next(block)) {
-            block_prev(block_next(block)) = prev;
-        }
+        if (block_next(block)) block_prev(block_next(block)) = prev;
     }
 }
 
