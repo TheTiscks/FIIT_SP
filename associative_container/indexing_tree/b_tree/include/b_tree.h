@@ -435,11 +435,15 @@ public:
     btree_const_iterator lower_bound(const tkey& key) const;
     btree_iterator upper_bound(const tkey& key)
     {
-        return lower_bound(key);
+        auto it = lower_bound(key);
+        if (it != end() && it->first == key) ++it;
+        return it;
     }
     btree_const_iterator upper_bound(const tkey& key) const
     {
-        return lower_bound(key);
+        auto it = lower_bound(key);
+        if (it != end() && it->first == key) ++it;
+        return it;
     }
     bool contains(const tkey& key) const;
 
